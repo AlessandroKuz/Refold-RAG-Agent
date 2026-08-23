@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from langchain_core.documents import Document
+from langchain_community.retrievers import BM25Retriever
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
@@ -83,3 +84,16 @@ def ingest_resources(
 
     logger.info("Ingestion complete. Total chunks generated: %d", len(all_docs))
     return all_docs
+
+
+def build_bm25_retriever(
+    docs: list[Document],
+    k: int = 10,
+) -> BM25Retriever | None:
+    """Build a BM25 keyword retriever from split documents."""
+    if not docs:
+        return None
+    retriever = BM25Retriever.from_documents(docs)
+    retriever.k = k
+    return retriever
+

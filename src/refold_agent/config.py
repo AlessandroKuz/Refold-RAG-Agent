@@ -75,6 +75,22 @@ class Settings(BaseSettings):
         default=200,
         description="Character overlap between consecutive chunks",
     )
+    hybrid_pool_size: int = Field(
+        default=10,
+        description="Candidate chunks retrieved per branch (BM25 & Chroma) before reranking",
+    )
+    rerank_top_k: int = Field(
+        default=6,
+        description="Top chunks retained after FlashRank cross-encoder reranking",
+    )
+    flashrank_model: str = Field(
+        default="ms-marco-TinyBERT-L-2-v2",
+        description="FlashRank cross-encoder model name",
+    )
+    rerank_score_threshold: float = Field(
+        default=0.5,
+        description="Minimum score threshold for reranked chunks",
+    )
 
     def ensure_directories(self) -> None:
         """Ensure runtime directories exist."""
