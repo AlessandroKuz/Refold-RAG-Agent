@@ -77,12 +77,12 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 | T8 | x | Implement tests (`tests/test_rag.py`, `tests/test_api.py`) verifying V1-V10 | V1..V10 |
 | T9 | x | Create `docs/architecture.md` (philosophy, chunking rationale, OpenWebUI architecture) | I8 |
 | T10 | x | Populate `README.md` (overview, quickstart, OpenWebUI setup, Docker roadmap) | I9 |
-| T11 | . | Update `config.py` with FlashRank model and hybrid pool hyperparameters | V10,C.rag |
-| T12 | . | Update `ingest.py` to build `BM25Retriever` from loaded chunks | V1,V14 |
-| T13 | . | Implement `classify_intent()` and Refold persona prompts in `rag.py` | V12,V13,V16 |
-| T14 | . | Implement `hybrid_search_and_rerank()` with FlashRank in `rag.py` | V14,V15 |
-| T15 | . | Add tests verifying intent routing, "CARA" keyword retrieval, and reranking | V12..V16 |
-| T16 | . | Update `docs/architecture.md` and `README.md` with hybrid search & routing diagram | I8,I9 |
+| T11 | x | Update `config.py` with FlashRank model and hybrid pool hyperparameters | V10,C.rag |
+| T12 | x | Update `ingest.py` to build `BM25Retriever` from loaded chunks | V1,V14 |
+| T13 | x | Implement `classify_intent()` and Refold persona prompts in `rag.py` | V12,V13,V16 |
+| T14 | x | Implement `hybrid_search_and_rerank()` with FlashRank in `rag.py` | V14,V15 |
+| T15 | x | Add tests verifying intent routing, "CARA" keyword retrieval, and reranking | V12..V16 |
+| T16 | x | Update `docs/architecture.md` and `README.md` with hybrid search & routing diagram | I8,I9 |
 
 ## §B — Bugs
 | id | date | cause | fix |

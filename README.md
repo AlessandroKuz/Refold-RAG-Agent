@@ -8,11 +8,14 @@ Exposes an **OpenAI-compatible API** with SSE streaming for **OpenWebUI**, along
 
 ## Key Features
 
+- **Typed Intent Router**: Fast Pydantic enum routing (`GREETING` → instant persona reply, `REFOLD_QUERY` → RAG, `OUT_OF_SCOPE` → refusal).
+- **Hybrid Search (BM25 + Chroma)**: Captures exact keyword acronyms (`CARA`, `0A`, `4X`, `CEFR`) alongside dense semantic concepts.
+- **FlashRank Cross-Encoder Reranking**: Re-scores merged candidate pool locally via `ms-marco-TinyBERT-L-2-v2`.
 - **Hierarchical Markdown Chunking**: Preserves phase and section header breadcrumbs (`#`, `##`, `###`).
 - **OpenAI-Compatible `/v1/` Endpoints**: Drop-in backend for OpenWebUI with real-time SSE token streaming.
-- **Strict Anti-Hallucination & Score Filtering**: Cosine similarity threshold (`> 0.5`) prevents hallucinated advice on out-of-scope queries.
+- **Strict Anti-Hallucination & Score Filtering**: Rerank score threshold (`>= 0.5`) prevents hallucinated advice on out-of-scope queries.
 - **Contextual Follow-up Rephrasing**: Automatically reformulates conversational follow-ups into standalone vector queries.
-- **Source Citations**: Every response includes source filenames and section headers.
+- **Source Citations**: Every RAG response includes source filenames and section headers.
 - **SQLite Audit Logging**: Persists all prompts, rephrased queries, retrieved chunk metadata, and completions in `./data/chat.db`.
 - **12-Factor Cloud & Docker Ready**: Single `./data/` volume mount for AWS ECS / ALB deployment in Phase 2.
 
