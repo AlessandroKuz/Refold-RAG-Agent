@@ -1,13 +1,13 @@
 # SPEC.md
 
 ## §G — Goal
-Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdown documents in `resources/`. FastAPI exposes OpenAI-compatible SSE endpoints for OpenWebUI frontend, backed by ChromaDB and Ollama. Document architecture and design decisions in `docs/` and `README.md`.
+Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdown documents in `resources/`. FastAPI exposes OpenAI-compatible SSE endpoints for OpenWebUI frontend, backed by ChromaDB + BM25 hybrid search, FlashRank cross-encoder reranking, intent routing, and Ollama. Embed Refold.la identity and methodology coaching persona in system prompts.
 
 ## §C — Constraints
 - **Python**: ≥3.13, managed with `pyproject.toml`
 - **Config**: 12-Factor App compliant using `pydantic-settings` (all paths, ports, model names overridable via env vars)
 - **Ollama Models**:
-  - Chat: `gpt-oss`
+  - Chat & Rephrasing: `gpt-oss`
   - Embedding: `qwen3-embedding`
   - Base URL: `http://localhost:11434` (`OLLAMA_BASE_URL`)
 - **Storage Consolidation** (Docker-ready single volume mount):
@@ -17,18 +17,19 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 - **Chunking Pipeline**:
   - `MarkdownHeaderTextSplitter` (`#`, `##`, `###`) to preserve topic hierarchy
   - `RecursiveCharacterTextSplitter` (chunk_size=1000, overlap=200)
-- **Retrieval & Generation**:
+- **Retrieval & Reranking**:
+  - Fast Intent Router: classifies `GREETING` (direct reply) vs `REFOLD_QUERY` (RAG) vs `OUT_OF_SCOPE` (refusal)
   - Multi-turn contextual query rephrasing for conversation continuity
-  - Retrieval `top_k = 8`
-  - Cosine similarity threshold: strict score > 0.5 filter
+  - Hybrid retrieval: BM25 (sparse keyword match for `CARA`, `0A`, `4X`, `CEFR`) + Chroma (dense vectors)
+  - Reranker: `FlashRank` (`ms-marco-TinyBERT-L-2-v2`, local ONNX CPU) re-scores top-15 candidate pool down to top-6
+  - Cosine/cross-encoder score threshold filter: score ≥ 0.5
   - Out-of-scope fallback: strict refusal without hallucination
-  - Citations: Markdown `### Sources:` section appended at the end
+  - Citations: Markdown `### Sources:` section appended at the end of RAG responses
+- **Persona & Identity**:
+  - System prompts explicitly establish Refold Assistant identity and `refold.la` as knowledge origin
 - **Frontend / Cloud**:
   - OpenAI-compatible `/v1/` contract for OpenWebUI with SSE token streaming
   - `GET /health` endpoint for Docker and AWS ALB / ECS target group healthchecks
-- **Documentation**:
-  - `docs/architecture.md` explaining RAG design decisions & 12-factor cloud principles
-  - `README.md` with full setup, OpenWebUI connection guide, and API reference
 
 ## §I — Interfaces
 | id | surface | desc |
@@ -48,15 +49,20 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 |---|---|
 | V1 | Ingestion indexes all markdown files in `resources/` with header hierarchy metadata |
 | V2 | `qwen3-embedding` used consistently for both indexing and query embedding |
-| V3 | Chunks with cosine similarity ≤ 0.5 excluded from prompt context |
+| V3 | Chunks with similarity/rerank score < 0.5 excluded from prompt context |
 | V4 | In multi-turn chat, follow-up queries rephrased before retrieval when history present |
-| V5 | Queries with no matching chunks (>0.5) trigger strict out-of-scope refusal without hallucination |
-| V6 | Generated answers include markdown `### Sources:` section with filenames and headers |
+| V5 | Queries with no matching chunks (score < 0.5) trigger strict out-of-scope refusal without hallucination |
+| V6 | Generated RAG answers include markdown `### Sources:` section with filenames and headers |
 | V7 | `/v1/chat/completions` handles both `stream: true` (SSE chunks) and `stream: false` (JSON) |
 | V8 | All requests, retrieved contexts, and answers logged to SQLite `./data/chat.db` |
 | V9 | Index loaded from disk on startup; only re-indexed if empty or `--reindex` passed |
 | V10 | Service config strictly driven by `pydantic-settings` with zero hardcoded environment paths |
 | V11 | `main.py` adds `src` to `sys.path` dynamically for standalone execution without editable install |
+| V12 | Intent router classifies prompts before retrieval: `GREETING` → direct stream, `REFOLD_QUERY` → RAG, `OUT_OF_SCOPE` → refusal |
+| V13 | `GREETING` queries bypass vector search and return warm Refold Assistant persona response with zero citations |
+| V14 | `REFOLD_QUERY` uses Hybrid Search (BM25 + Chroma) ensuring exact acronyms (`CARA`, `0A`, `4X`, `CEFR`) are retrieved |
+| V15 | FlashRank cross-encoder re-scores merged candidate pool, filtering chunks by score threshold |
+| V16 | System prompts explicitly embed Refold.la provenance and methodology coaching persona |
 
 ## §T — Tasks
 | id | status | desc | cites |
@@ -71,6 +77,12 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 | T8 | x | Implement tests (`tests/test_rag.py`, `tests/test_api.py`) verifying V1-V10 | V1..V10 |
 | T9 | x | Create `docs/architecture.md` (philosophy, chunking rationale, OpenWebUI architecture) | I8 |
 | T10 | x | Populate `README.md` (overview, quickstart, OpenWebUI setup, Docker roadmap) | I9 |
+| T11 | . | Update `config.py` with FlashRank model and hybrid pool hyperparameters | V10,C.rag |
+| T12 | . | Update `ingest.py` to build `BM25Retriever` from loaded chunks | V1,V14 |
+| T13 | . | Implement `classify_intent()` and Refold persona prompts in `rag.py` | V12,V13,V16 |
+| T14 | . | Implement `hybrid_search_and_rerank()` with FlashRank in `rag.py` | V14,V15 |
+| T15 | . | Add tests verifying intent routing, "CARA" keyword retrieval, and reranking | V12..V16 |
+| T16 | . | Update `docs/architecture.md` and `README.md` with hybrid search & routing diagram | I8,I9 |
 
 ## §B — Bugs
 | id | date | cause | fix |
