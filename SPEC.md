@@ -63,6 +63,8 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 | V14 | `REFOLD_QUERY` uses Hybrid Search (BM25 + Chroma) ensuring exact acronyms (`CARA`, `0A`, `4X`, `CEFR`) are retrieved |
 | V15 | FlashRank cross-encoder re-scores merged candidate pool, filtering chunks by score threshold |
 | V16 | System prompts explicitly embed Refold.la provenance and methodology coaching persona |
+| V17 | ? planned: small child chunks embedded for vector search; full parent `##` section returned to LLM context (small-to-big) |
+| V18 | ? planned: `LANGSMITH_TRACING=true` traces retrieval + generation runs with latency & score metadata |
 
 ## §T — Tasks
 | id | status | desc | cites |
@@ -83,6 +85,8 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 | T14 | x | Implement `hybrid_search_and_rerank()` with FlashRank in `rag.py` | V14,V15 |
 | T15 | x | Add tests verifying intent routing, "CARA" keyword retrieval, and reranking | V12..V16 |
 | T16 | x | Update `docs/architecture.md` and `README.md` with hybrid search & routing diagram | I8,I9 |
+| T17 | . | deferred: implement Parent Document Retriever (small-to-big) in `ingest.py` + `rag.py` | V17? |
+| T18 | . | deferred: add LangSmith observability (env vars, retriever trace logging) | V18? |
 
 ## §B — Bugs
 | id | date | cause | fix |
