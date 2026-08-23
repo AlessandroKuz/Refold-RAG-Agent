@@ -18,7 +18,7 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
   - `MarkdownHeaderTextSplitter` (`#`, `##`, `###`) to preserve topic hierarchy
   - `RecursiveCharacterTextSplitter` (chunk_size=1000, overlap=200)
 - **Retrieval & Reranking**:
-  - Fast Intent Router: classifies `GREETING` (direct reply) vs `REFOLD_QUERY` (RAG) vs `OUT_OF_SCOPE` (refusal)
+  - Fast Intent Router: Pydantic `Enum` (`QueryIntent`: `GREETING`, `REFOLD_QUERY`, `OUT_OF_SCOPE`) via `with_structured_output`
   - Multi-turn contextual query rephrasing for conversation continuity
   - Hybrid retrieval: BM25 (sparse keyword match for `CARA`, `0A`, `4X`, `CEFR`) + Chroma (dense vectors)
   - Reranker: `FlashRank` (`ms-marco-TinyBERT-L-2-v2`, local ONNX CPU) re-scores top-15 candidate pool down to top-6
@@ -58,7 +58,7 @@ Build modular, cloud-ready local RAG API for ~45 Refold language-learning markdo
 | V9 | Index loaded from disk on startup; only re-indexed if empty or `--reindex` passed |
 | V10 | Service config strictly driven by `pydantic-settings` with zero hardcoded environment paths |
 | V11 | `main.py` adds `src` to `sys.path` dynamically for standalone execution without editable install |
-| V12 | Intent router classifies prompts before retrieval: `GREETING` → direct stream, `REFOLD_QUERY` → RAG, `OUT_OF_SCOPE` → refusal |
+| V12 | Intent router outputs typed Pydantic `QueryIntent` enum before retrieval: `GREETING` → direct stream, `REFOLD_QUERY` → RAG, `OUT_OF_SCOPE` → refusal |
 | V13 | `GREETING` queries bypass vector search and return warm Refold Assistant persona response with zero citations |
 | V14 | `REFOLD_QUERY` uses Hybrid Search (BM25 + Chroma) ensuring exact acronyms (`CARA`, `0A`, `4X`, `CEFR`) are retrieved |
 | V15 | FlashRank cross-encoder re-scores merged candidate pool, filtering chunks by score threshold |
