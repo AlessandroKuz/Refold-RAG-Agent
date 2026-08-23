@@ -20,7 +20,7 @@ models: pull-models
 
 # Run test suite
 test:
-    @if [ -f .venv/bin/pytest ]; then .venv/bin/pytest; else pytest; fi
+    @if [ -f .venv/bin/pytest ]; then .venv/bin/pytest tests; else pytest tests; fi
 
 # Force rebuild Chroma vector index from resources/
 index:

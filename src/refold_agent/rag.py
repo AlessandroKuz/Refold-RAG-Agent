@@ -10,9 +10,10 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from pydantic import BaseModel, Field
+from flashrank import Ranker, RerankRequest
 
 from refold_agent.config import Settings
-from refold_agent.ingest import ingest_resources
+from refold_agent.ingest import build_bm25_retriever, ingest_resources
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +89,23 @@ class RAGEngine:
             persist_directory=str(settings.chroma_dir),
             collection_metadata={"hnsw:space": "cosine"},
         )
+        self.ranker = Ranker(model_name=settings.flashrank_model)
+        self.bm25_retriever = None
+
+    def _ensure_bm25(self) -> None:
+        """Build or return existing in-memory BM25 keyword retriever."""
+        if self.bm25_retriever is None:
+            docs = ingest_resources(
+                self.settings.resources_dir,
+                chunk_size=self.settings.chunk_size,
+                chunk_overlap=self.settings.chunk_overlap,
+            )
+            self.bm25_retriever = build_bm25_retriever(
+                docs, k=self.settings.hybrid_pool_size
+            )
 
     def initialize_index(self, force_reindex: bool = False) -> int:
-        """Initialize or rebuild the Chroma vector index from markdown resources."""
+        """Initialize or rebuild Chroma vector index and BM25 retriever from markdown resources."""
         current_count = 0
         try:
             current_count = self.vector_store._collection.count()
@@ -102,6 +117,7 @@ class RAGEngine:
                 "Chroma vector store already contains %d documents. Skipping indexing.",
                 current_count,
             )
+            self._ensure_bm25()
             return current_count
 
         logger.info(
@@ -134,8 +150,11 @@ class RAGEngine:
             return 0
 
         self.vector_store.add_documents(docs)
+        self.bm25_retriever = build_bm25_retriever(
+            docs, k=self.settings.hybrid_pool_size
+        )
         total = self.vector_store._collection.count()
-        logger.info("Successfully indexed %d chunks into ChromaDB.", total)
+        logger.info("Successfully indexed %d chunks into ChromaDB and BM25.", total)
         return total
 
     async def contextualize_query(
@@ -203,28 +222,77 @@ class RAGEngine:
             logger.warning("Structured intent classification failed: %s. Defaulting to REFOLD_QUERY.", e)
             return QueryIntent.REFOLD_QUERY
 
+    def hybrid_search_and_rerank(
+        self,
+        query: str,
+    ) -> list[tuple[Document, float]]:
+        """Hybrid retrieval (BM25 sparse + Chroma dense) with FlashRank cross-encoder reranking."""
+        self._ensure_bm25()
+
+        # 1. Sparse keyword retrieval (BM25)
+        bm25_docs: list[Document] = []
+        if self.bm25_retriever:
+            try:
+                bm25_docs = self.bm25_retriever.invoke(query)
+            except Exception as e:
+                logger.warning("BM25 retrieval failed: %s", e)
+
+        # 2. Dense semantic retrieval (Chroma)
+        chroma_docs: list[Document] = []
+        try:
+            chroma_results = self.vector_store.similarity_search_with_relevance_scores(
+                query,
+                k=self.settings.hybrid_pool_size,
+            )
+            chroma_docs = [doc for doc, _ in chroma_results]
+        except Exception as e:
+            logger.warning("Chroma retrieval failed: %s", e)
+
+        # 3. Deduplicate candidate pool
+        candidates: list[Document] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for doc in bm25_docs + chroma_docs:
+            key = (doc.metadata.get("source", ""), doc.page_content[:100])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                candidates.append(doc)
+
+        if not candidates:
+            return []
+
+        # 4. FlashRank cross-encoder reranking
+        try:
+            passages = [
+                {"id": i, "text": doc.page_content, "meta": doc.metadata}
+                for i, doc in enumerate(candidates)
+            ]
+            rerank_req = RerankRequest(query=query, passages=passages)
+            reranked = self.ranker.rerank(rerank_req)
+
+            filtered: list[tuple[Document, float]] = []
+            for item in reranked[: self.settings.rerank_top_k]:
+                score = float(item["score"])
+                if score >= self.settings.rerank_score_threshold:
+                    doc = Document(page_content=item["text"], metadata=item["meta"])
+                    filtered.append((doc, score))
+
+            logger.debug(
+                "Hybrid rerank produced %d chunks (threshold >= %s, raw pool: %d)",
+                len(filtered),
+                self.settings.rerank_score_threshold,
+                len(candidates),
+            )
+            return filtered
+        except Exception as e:
+            logger.error("FlashRank reranking failed: %s. Falling back to raw candidates.", e)
+            return [(doc, 1.0) for doc in candidates[: self.settings.rerank_top_k]]
+
     def retrieve_relevant_chunks(
         self,
         query: str,
     ) -> list[tuple[Document, float]]:
-        """Retrieve top_k chunks and filter by cosine similarity threshold."""
-        results_with_scores = self.vector_store.similarity_search_with_relevance_scores(
-            query,
-            k=self.settings.top_k,
-        )
-
-        filtered: list[tuple[Document, float]] = []
-        for doc, score in results_with_scores:
-            if score >= self.settings.similarity_threshold:
-                filtered.append((doc, float(score)))
-
-        logger.debug(
-            "Retrieved %d chunks (threshold >= %s, raw results: %d)",
-            len(filtered),
-            self.settings.similarity_threshold,
-            len(results_with_scores),
-        )
-        return filtered
+        """Retrieve relevant chunks using hybrid search and reranking."""
+        return self.hybrid_search_and_rerank(query)
 
     @staticmethod
     def format_sources_section(
