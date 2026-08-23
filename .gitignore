@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local persistent data / Chroma / SQLite
+data/
+chroma_db/
+
